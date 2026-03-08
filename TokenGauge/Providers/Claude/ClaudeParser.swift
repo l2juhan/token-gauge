@@ -38,7 +38,9 @@ enum ClaudeParser {
                 id: "extra_usage",
                 label: "추가 사용량",
                 usedPercentage: extra.utilization ?? 0,
-                resetsAt: nil
+                resetsAt: nil,
+                usedCredits: extra.usedCredits,
+                monthlyLimit: extra.monthlyLimit
             )
         }()
 

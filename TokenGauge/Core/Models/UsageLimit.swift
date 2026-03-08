@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct UsageLimit: Codable, Identifiable, Sendable {
@@ -5,6 +6,17 @@ struct UsageLimit: Codable, Identifiable, Sendable {
     let label: String
     let usedPercentage: Double
     let resetsAt: Date?
+    let usedCredits: Double?   // 센트 단위
+    let monthlyLimit: Double?  // 센트 단위
+
+    init(id: String, label: String, usedPercentage: Double, resetsAt: Date?, usedCredits: Double? = nil, monthlyLimit: Double? = nil) {
+        self.id = id
+        self.label = label
+        self.usedPercentage = usedPercentage
+        self.resetsAt = resetsAt
+        self.usedCredits = usedCredits
+        self.monthlyLimit = monthlyLimit
+    }
 
     var remainingTime: TimeInterval? {
         guard let resetsAt else { return nil }
@@ -13,23 +25,33 @@ struct UsageLimit: Codable, Identifiable, Sendable {
 
     var severityLevel: SeverityLevel {
         switch usedPercentage {
-        case ..<30:  return .normal
-        case ..<60:  return .moderate
+        case ..<60:  return .normal
         case ..<80:  return .warning
         default:     return .critical
         }
     }
+
+    var isMainLimit: Bool {
+        ["five_hour", "seven_day"].contains(id)
+    }
 }
 
 enum SeverityLevel: Sendable {
-    case normal, moderate, warning, critical
+    case normal, warning, critical
 
     var color: Color {
         switch self {
         case .normal:   return .green
-        case .moderate: return .yellow
         case .warning:  return .orange
         case .critical: return .red
+        }
+    }
+
+    var nsColor: NSColor {
+        switch self {
+        case .normal:   return .systemGreen
+        case .warning:  return .systemOrange
+        case .critical: return .systemRed
         }
     }
 }

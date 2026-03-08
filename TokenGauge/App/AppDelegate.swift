@@ -4,7 +4,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var claudeProvider: ClaudeProvider!
-    private var scheduler: RefreshScheduler!
+    private let scheduler = RefreshScheduler()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupProvider()
@@ -27,7 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.title = "TG: --"
+            button.attributedTitle = makeMenuBarText(h: "--", hColor: .secondaryLabelColor, d: "--", dColor: .secondaryLabelColor)
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -37,13 +37,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover = NSPopover()
         popover.contentSize = NSSize(width: Constants.popoverWidth, height: Constants.popoverHeight)
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PopoverView())
+        popover.contentViewController = NSHostingController(rootView: PopoverView(scheduler: scheduler))
     }
 
     // MARK: - 스마트 폴링
 
     private func startScheduler() {
-        scheduler = RefreshScheduler()
         scheduler.start { [weak self] in
             await self?.fetchAndUpdateMenuBar()
         }
@@ -79,17 +78,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } catch {
             print("[TokenGauge] \(error.localizedDescription)")
-            statusItem.button?.title = "TG: --"
+            statusItem.button?.attributedTitle = makeMenuBarText(
+                h: "--", hColor: .secondaryLabelColor,
+                d: "--", dColor: .secondaryLabelColor
+            )
         }
     }
+
+    // MARK: - 메뉴바 색상 텍스트
 
     private func updateMenuBarText(usage: UsageData) {
         let fiveHour = usage.limits.first { $0.id == "five_hour" }
         let sevenDay = usage.limits.first { $0.id == "seven_day" }
 
         let h = fiveHour.map { "\(Int($0.usedPercentage))%" } ?? "--"
+        let hColor = fiveHour?.severityLevel.nsColor ?? .secondaryLabelColor
         let d = sevenDay.map { "\(Int($0.usedPercentage))%" } ?? "--"
+        let dColor = sevenDay?.severityLevel.nsColor ?? .secondaryLabelColor
 
-        statusItem.button?.title = "5h:\(h) 7d:\(d)"
+        statusItem.button?.attributedTitle = makeMenuBarText(h: h, hColor: hColor, d: d, dColor: dColor)
+    }
+
+    private func makeMenuBarText(h: String, hColor: NSColor, d: String, dColor: NSColor) -> NSAttributedString {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let labelAttrs: [NSAttributedString.Key: Any] = [.font: font]
+
+        let result = NSMutableAttributedString()
+        result.append(NSAttributedString(string: "5h:[", attributes: labelAttrs))
+        result.append(NSAttributedString(string: h, attributes: [.font: font, .foregroundColor: hColor]))
+        result.append(NSAttributedString(string: "] | 7d:[", attributes: labelAttrs))
+        result.append(NSAttributedString(string: d, attributes: [.font: font, .foregroundColor: dColor]))
+        result.append(NSAttributedString(string: "]", attributes: labelAttrs))
+        return result
     }
 }

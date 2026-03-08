@@ -14,13 +14,16 @@ enum Constants {
     static let userAgent = "TokenGauge/1.0"
 
     // MARK: - 폴링
-    static let activePollingInterval: TimeInterval = 300   // 5분
+    static let activePollingInterval: TimeInterval = 600   // 10분
     static let idlePollingInterval: TimeInterval = 3600    // 1시간
     static let maxBackoffInterval: TimeInterval = 1800     // 30분
 
-    // MARK: - 감시 대상 Bundle IDs
+    // MARK: - 감시 대상
     enum BundleIDs {
-        static let claudeDesktop = "com.anthropic.claudeDesktop"
+        static let claudeDesktop = "com.anthropic.claudefordesktop"
         static let chatGPT = "com.openai.chat"       // Phase 3
     }
+
+    // CLI 프로세스 이름 (NSWorkspace로 감지 불가)
+    static let monitoredProcessNames = ["claude"]
 }

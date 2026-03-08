@@ -11,23 +11,27 @@ struct ProgressBarView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(Int(limit.usedPercentage))%")
-                    .font(.caption.monospacedDigit())
+                    .font(.caption.monospacedDigit().bold())
                     .foregroundStyle(limit.severityLevel.color)
             }
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: 4)
                         .fill(.quaternary)
 
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: 4)
                         .fill(limit.severityLevel.color)
                         .frame(width: geometry.size.width * min(limit.usedPercentage / 100.0, 1.0))
                 }
             }
-            .frame(height: 6)
+            .frame(height: 8)
 
-            if let resetsAt = limit.resetsAt {
+            if let remaining = limit.remainingTime, remaining > 0 {
+                Text("\(TimeFormatter.format(remaining)) 후 리셋")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            } else if let resetsAt = limit.resetsAt {
                 Text(TimeFormatter.resetDateFormat(resetsAt))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

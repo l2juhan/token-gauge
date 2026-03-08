@@ -90,7 +90,7 @@ class RefreshScheduler {
     // MARK: - 내부
 
     private func updateMode() {
-        let running = isAnyMonitoredAppRunning()
+        let running = isAnyMonitoredRunning()
         isActive = running
         if backoffMultiplier == 0 {
             currentInterval = running ? Constants.activePollingInterval : Constants.idlePollingInterval
@@ -104,11 +104,36 @@ class RefreshScheduler {
         }
     }
 
-    private func isAnyMonitoredAppRunning() -> Bool {
+    /// GUI 앱 (NSWorkspace) + CLI 프로세스 모두 확인
+    private func isAnyMonitoredRunning() -> Bool {
+        // 1) GUI 앱 확인
         let bundleIDs = [Constants.BundleIDs.claudeDesktop]
-        return NSWorkspace.shared.runningApplications.contains { app in
+        let guiRunning = NSWorkspace.shared.runningApplications.contains { app in
             bundleIDs.contains(where: { $0 == app.bundleIdentifier })
         }
+        if guiRunning { return true }
+
+        // 2) CLI 프로세스 확인 (Claude Code 등)
+        return isAnyCLIProcessRunning()
+    }
+
+    private func isAnyCLIProcessRunning() -> Bool {
+        for name in Constants.monitoredProcessNames {
+            let pipe = Pipe()
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            process.arguments = ["-x", name]
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus == 0 { return true }
+            } catch {
+                continue
+            }
+        }
+        return false
     }
 
     private func isMonitoredApp(_ bundleID: String?) -> Bool {
