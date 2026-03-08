@@ -4,16 +4,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var claudeProvider: ClaudeProvider!
+    private var scheduler: RefreshScheduler!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupProvider()
         setupStatusItem()
         setupPopover()
-
-        Task {
-            await fetchAndUpdateMenuBar()
-        }
+        startScheduler()
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        scheduler.stop()
+    }
+
+    // MARK: - 초기 설정
 
     private func setupProvider() {
         claudeProvider = ClaudeProvider()
@@ -36,21 +40,43 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentViewController = NSHostingController(rootView: PopoverView())
     }
 
+    // MARK: - 스마트 폴링
+
+    private func startScheduler() {
+        scheduler = RefreshScheduler()
+        scheduler.start { [weak self] in
+            await self?.fetchAndUpdateMenuBar()
+        }
+        // 최초 1회 즉시 요청
+        Task { await fetchAndUpdateMenuBar() }
+    }
+
+    // MARK: - 팝오버
+
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            // 팝오버 열 때마다 최신 데이터 요청
             Task { await fetchAndUpdateMenuBar() }
         }
     }
+
+    // MARK: - 데이터 갱신
 
     private func fetchAndUpdateMenuBar() async {
         do {
             let usage = try await claudeProvider.fetchUsage()
             updateMenuBarText(usage: usage)
+            scheduler.reportSuccess()
+        } catch let error as ClaudeAPIError where error == .rateLimited {
+            print("[TokenGauge] 429 rate limited")
+            scheduler.reportRateLimited()
+            // 캐시 데이터가 있으면 표시
+            if let cached = claudeProvider.currentUsage {
+                updateMenuBarText(usage: cached)
+            }
         } catch {
             print("[TokenGauge] \(error.localizedDescription)")
             statusItem.button?.title = "TG: --"
