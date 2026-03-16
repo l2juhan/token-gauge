@@ -1,3 +1,4 @@
+import Sparkle
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -5,6 +6,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover!
     private var claudeProvider: ClaudeProvider!
     private let scheduler = RefreshScheduler()
+    let updaterController: SPUStandardUpdaterController
+
+    override init() {
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupProvider()

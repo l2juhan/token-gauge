@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - name: Install Developer ID Certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$CERTIFICATE_PASSWORD" \
+            -k "$KEYCHAIN_PATH" \
+            -T /usr/bin/codesign
+
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Resolve SPM dependencies
+        run: xcodebuild -resolvePackageDependencies -project TokenGauge.xcodeproj -scheme TokenGauge
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project TokenGauge.xcodeproj \
+            -scheme TokenGauge \
+            -configuration Release \
+            -archivePath dist/TokenGauge.xcarchive \
+            MARKETING_VERSION="${{ steps.version.outputs.VERSION }}" \
+            CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M)" \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM="4XTGL2D5GF" \
+            CODE_SIGN_STYLE=Manual
+
+      - name: Export
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath dist/TokenGauge.xcarchive \
+            -exportOptionsPlist scripts/ExportOptions.plist \
+            -exportPath dist/export
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent "dist/export/TokenGauge.app" \
+            "dist/TokenGauge-${{ steps.version.outputs.VERSION }}.zip"
+
+          xcrun notarytool submit \
+            "dist/TokenGauge-${{ steps.version.outputs.VERSION }}.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "4XTGL2D5GF" \
+            --password "$APP_SPECIFIC_PASSWORD" \
+            --wait
+
+          xcrun stapler staple "dist/export/TokenGauge.app"
+
+      - name: Create DMG
+        run: |
+          mkdir -p dist/dmg-staging
+          cp -R dist/export/TokenGauge.app dist/dmg-staging/
+          ln -s /Applications dist/dmg-staging/Applications
+
+          hdiutil create -volname "TokenGauge" \
+            -srcfolder dist/dmg-staging \
+            -ov -format UDZO \
+            "dist/TokenGauge-${{ steps.version.outputs.VERSION }}.dmg"
+
+          xcrun notarytool submit \
+            "dist/TokenGauge-${{ steps.version.outputs.VERSION }}.dmg" \
+            --apple-id "$APPLE_ID" \
+            --team-id "4XTGL2D5GF" \
+            --password "$APP_SPECIFIC_PASSWORD" \
+            --wait
+
+          xcrun stapler staple \
+            "dist/TokenGauge-${{ steps.version.outputs.VERSION }}.dmg"
+
+      - name: Generate appcast.xml
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="dist/TokenGauge-${VERSION}.dmg"
+          FILESIZE=$(stat -f%z "$DMG")
+          DATE=$(date -R 2>/dev/null || date "+%a, %d %b %Y %H:%M:%S %z")
+
+          # Sparkle EdDSA 서명
+          SIGN_OUTPUT=""
+          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            SIGN_TOOL=$(find ~/Library/Developer/Xcode/DerivedData -name "sign_update" -type f 2>/dev/null | head -1)
+            if [ -n "$SIGN_TOOL" ]; then
+              SIGN_OUTPUT=$("$SIGN_TOOL" "$DMG" --ed-key-file <(echo "$SPARKLE_PRIVATE_KEY") 2>/dev/null || echo "")
+            fi
+          fi
+
+          ED_SIGNATURE=""
+          if echo "$SIGN_OUTPUT" | grep -q 'edSignature'; then
+            ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -o 'edSignature="[^"]*"' | sed 's/edSignature="//;s/"//')
+          fi
+
+          cat > dist/appcast.xml << APPCAST_EOF
+          <?xml version="1.0" standalone="yes"?>
+          <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+            <channel>
+              <title>TokenGauge</title>
+              <item>
+                <title>Version ${VERSION}</title>
+                <sparkle:version>$(date +%Y%m%d%H%M)</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <pubDate>${DATE}</pubDate>
+                <enclosure
+                  url="https://github.com/l2juhan/token-gauge/releases/download/v${VERSION}/TokenGauge-${VERSION}.dmg"
+                  length="${FILESIZE}"
+                  type="application/octet-stream"
+                  sparkle:edSignature="${ED_SIGNATURE}"
+                />
+              </item>
+            </channel>
+          </rss>
+          APPCAST_EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/TokenGauge-${{ steps.version.outputs.VERSION }}.dmg
+            dist/TokenGauge-${{ steps.version.outputs.VERSION }}.zip
+            dist/appcast.xml
+          generate_release_notes: true

@@ -1,0 +1,22 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+
+# Build artifacts
+*.app
+*.dmg
+*.zip
+*.dSYM.zip
+
+# Distribution
+dist/
+
+# macOS
+.DS_Store
+
+# Sparkle signing key (NEVER commit)
+sparkle_private_key
+*.pem
