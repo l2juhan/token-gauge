@@ -101,7 +101,7 @@ TokenGauge/
 - [x] Phase 0: Python SwiftBar 프로토타입
 - [x] Phase 1: macOS 네이티브 앱 (Claude) — 스마트 폴링, 색상 코딩, Launch at Login
 - [x] Phase 2: 배포 — Homebrew, Sparkle 자동 업데이트, 공증, GitHub Actions CI/CD
-- [ ] Phase 3: 멀티 프로바이더 (ChatGPT, Gemini)
+- [ ] Phase 3: 멀티 프로바이더 (ChatGPT, Gemini) ← 현재
 
 ## 트러블슈팅
 

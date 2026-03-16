@@ -87,7 +87,7 @@ make release-unsigned VERSION=1.0.0
 
 - **Phase 0** (완료): Python SwiftBar 프로토타입
 - **Phase 1** (완료): macOS 네이티브 앱 — Claude 프로바이더 + 스마트 폴링 + UI
-- **Phase 2**: 배포 (Homebrew, Sparkle, 공증)
+- **Phase 2** (완료): 배포 (Homebrew, Sparkle, 공증, GitHub Actions CI/CD)
 - **Phase 3**: 멀티 프로바이더 (ChatGPT, Gemini)
 
 ## 배포
